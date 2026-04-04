@@ -290,9 +290,32 @@ See [SECURITY.md](SECURITY.md) for the full security model, boundaries, and oper
 
 Key guarantees:
 - API keys exist only in env vars — never in config files, logs, or workspace
-- Senpi MCP is isolated to the `execution` profile
+- Senpi MCP is **hard-excluded** from the analysis profile at renderer level (not just config)
 - Execution starts with `dry_run: true` and `allow_open_new_position: false`
 - `symbols.default_action: deny` — all non-listed symbols rejected
+- Risk policy validates 8 fields on every boot — container fails fast on misconfiguration
+- Skill installs require a 40-char SHA and verify HEAD integrity post-checkout
+
+---
+
+## CI Status
+
+CI runs on every push via GitHub Actions (`.github/workflows/ci.yml`):
+
+| Check | What it validates |
+|-------|------------------|
+| `shellcheck` | All `.sh` files in bootstrap/, scripts/, docker/, migrations/ |
+| `flake8` | `scripts/*.py` Python lint |
+| Render smoke | analysis + execution dry-run; API key leak check; Senpi excluded from analysis |
+| Risk tests | 7 cases: valid, allow action, empty allowlist, leverage>10, invalid mode, type error, missing file |
+| Backup/restore | Full round-trip; session exclusion; generated config exclusion |
+
+Run locally:
+```bash
+bash tests/smoke_render.sh
+bash tests/smoke_backup.sh
+bash tests/validate_risk_test.sh
+```
 
 ---
 
@@ -314,12 +337,14 @@ hermes-senpi-trader/
 │   └── run-migrations.sh           # Schema version migrations
 │
 ├── scripts/                        # Utility scripts
-│   ├── render-config.py            # Canonical YAML → Hermes config
-│   ├── install-skill.sh            # Pinned-commit skill installer
-│   ├── backup-export.sh            # Full volume backup
-│   ├── backup-restore.sh           # Restore from backup archive
+│   ├── render-config.py            # Canonical YAML → Hermes config (no keys on disk)
+│   ├── install-skill.sh            # Pinned-commit skill installer (SHA verified)
+│   ├── backup-export.sh            # Full volume backup (sessions excluded)
+│   ├── backup-restore.sh           # Restore from backup (path traversal guard)
 │   ├── export-config.sh            # Config-only export
-│   └── healthcheck.sh              # Container health validation
+│   ├── healthcheck.sh              # Container health validation
+│   └── lib/
+│       └── redact.sh               # Secret redaction helper library
 │
 ├── config/                         # Canonical config templates (.example.yaml)
 │   ├── providers/
@@ -348,6 +373,14 @@ hermes-senpi-trader/
 ├── migrations/
 │   └── 0001_initial_schema.sh
 │
+├── tests/
+│   ├── smoke_render.sh             # Config render smoke test (API key leak check)
+│   ├── smoke_backup.sh             # Backup/restore round-trip test
+│   └── validate_risk_test.sh       # Risk policy unit tests (7 cases)
+│
+├── .github/workflows/
+│   └── ci.yml                      # CI: shellcheck, flake8, smoke tests
+│
 └── docs/
     ├── architecture.md
     ├── deployment.md
@@ -355,6 +388,101 @@ hermes-senpi-trader/
     ├── migration.md
     └── security.md
 ```
+
+---
+
+## Production Checklists
+
+### Pre-Deployment Checklist
+
+```
+[ ] Volume mounted at /data (minimum 5 GB)
+[ ] ACTIVE_PROFILE=analysis (NOT execution for first deploy)
+[ ] OPENROUTER_API_KEY set in Railway Variables (not in any config file)
+[ ] DATA_DIR=/data in Railway Variables
+[ ] HERMES_VERSION pinned (e.g., v0.6.0) — never use 'latest'
+[ ] .env file is in .gitignore and not committed to git
+[ ] railway.toml contains no secret values
+[ ] CI green: shellcheck, python lint, render smoke, risk tests
+```
+
+### Paper Trading Checklist
+
+Before enabling execution profile:
+
+```
+[ ] At least 7 days of analysis profile without errors
+[ ] risk_policy.yaml reviewed — all 8 required fields intentionally set
+[ ] dry_run_default: true (YAML boolean, not string)
+[ ] allow_open_new_position: false
+[ ] mode: copilot
+[ ] symbols.allowlist has only intended symbols
+[ ] symbols.default_action: deny
+[ ] max_leverage <= 3 for initial testing
+[ ] max_daily_loss_usd set to acceptable ceiling
+[ ] Backup taken before switching profiles
+[ ] SENPI_AUTH_TOKEN valid
+[ ] ACTIVE_PROFILE=execution → redeploy → logs show "Risk policy validation passed"
+[ ] Healthcheck passes: bash scripts/healthcheck.sh
+```
+
+### Live Funds Checklist
+
+> WARNING: Do not skip any item. Each one protects real capital.
+
+Before setting `dry_run_default: false`:
+
+```
+[ ] Paper trading tested for at least 2 weeks
+[ ] Paper trade outcomes reviewed, strategy validated
+[ ] max_position_size_usd <= 5% of portfolio per trade
+[ ] max_daily_loss_usd < 3% of total capital
+[ ] max_leverage <= 3 (only increase after proven track record)
+[ ] Telegram or alert channel configured and tested
+[ ] Backup taken immediately before going live
+[ ] Rollback plan documented: Railway Deployments -> Rollback
+[ ] Someone monitors the first 24h of live trading
+[ ] dry_run_default: false — set explicitly and intentionally
+[ ] allow_open_new_position: true — set explicitly and intentionally
+[ ] Mode stays copilot or semi-auto — never jump directly to auto
+[ ] Bootstrap logs reviewed after deploy: validate-risk passed
+```
+
+### Restore Verification Checklist
+
+After restoring from a backup:
+
+```
+[ ] bash scripts/backup-restore.sh <archive.tar.gz> --yes
+[ ] Railway redeploy
+[ ] Bootstrap logs: "Config generation completed"
+[ ] Healthcheck passes: bash scripts/healthcheck.sh
+[ ] /data/providers/provider_registry.yaml exists and valid
+[ ] /data/risk/risk_policy.yaml exists
+[ ] /data/workspace/AGENTS.md exists
+[ ] Generated configs present: ls /data/.hermes/*/config.generated.yaml
+[ ] Sessions cleared: ls /data/.hermes/*/sessions/ (should be empty)
+[ ] API keys valid on new host: python3 scripts/render-config.py --validate-only
+[ ] ACTIVE_PROFILE=analysis tested before enabling execution
+```
+
+### Upgrade / Rollback Checklist
+
+Before upgrading `HERMES_VERSION`:
+
+```
+[ ] Backup taken: bash scripts/backup-export.sh
+[ ] Backup downloaded and verified locally: tar -tzf backup.tar.gz
+[ ] New HERMES_VERSION changelog reviewed for breaking changes
+[ ] HERMES_VERSION pinned in railway.toml (never 'latest')
+[ ] CI green before deploy
+[ ] Bootstrap migration logs reviewed after redeploy
+[ ] Healthcheck passes on new version
+[ ] Analysis profile tested before enabling execution
+```
+
+To rollback: `Railway Dashboard → Deployments → [previous] → Rollback`
+> The `/data` volume is unaffected by container rollback. Canonical configs and workspace are preserved.
 
 ---
 

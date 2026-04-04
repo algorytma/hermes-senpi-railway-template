@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # =============================================================================
-# scripts/install-skill.sh — Skill Kurulum Scripti
+# scripts/install-skill.sh — Skill Installer
 # =============================================================================
-# Bir skill manifest dosyasını okuyarak ilgili skill'i git clone ile kurar,
-# workspace'e sembolik bağ oluşturur.
+# Reads a skill manifest YAML and installs the skill at the pinned commit.
 #
-# Kullanım:
+# Usage:
 #   bash scripts/install-skill.sh /data/skills/manifests/wolf-strategy.yaml
 #   bash scripts/install-skill.sh /data/skills/manifests/wolf-strategy.yaml --force
 #
-# ZORUNLU: pinned_commit dolu olmalı — "REPLACE_WITH_REAL_COMMIT_HASH" kabul edilmez.
+# SECURITY requirements:
+#   - pinned_commit MUST be a real git SHA (no placeholders, no branch names)
+#   - After checkout, HEAD is verified to match pinned_commit exactly
+#   - Workspace symlink target must be within DATA_DIR (no escape)
+#   - eval is NOT used — manifest values pass through Python to a temp file
+#
+# INTEGRITY:
+#   - A 40-char hex SHA is required for pinned_commit
+#   - The actual checked-out HEAD is verified after clone + checkout
 # =============================================================================
 
 set -euo pipefail
@@ -19,111 +26,216 @@ MANIFEST_FILE="${1:-}"
 FORCE="${2:-}"
 
 log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SKILL] $*"; }
+warn() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SKILL] WARN: $*" >&2; }
 err()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [SKILL] ERROR: $*" >&2; }
 die()  { err "$*"; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Parametre kontrolü
+# Parameter validation
 # ---------------------------------------------------------------------------
-[[ -z "${MANIFEST_FILE}" ]] && die "Kullanım: install-skill.sh <manifest.yaml> [--force]"
-[[ ! -f "${MANIFEST_FILE}" ]] && die "Manifest dosyası bulunamadı: ${MANIFEST_FILE}"
+if [[ -z "${MANIFEST_FILE}" ]]; then
+  echo "Usage: install-skill.sh <manifest.yaml> [--force]" >&2
+  exit 1
+fi
 
-log "Skill kurulumu başlıyor: ${MANIFEST_FILE}"
+if [[ ! -f "${MANIFEST_FILE}" ]]; then
+  die "Manifest file not found: ${MANIFEST_FILE}"
+fi
+
+log "Skill install starting: ${MANIFEST_FILE}"
 
 # ---------------------------------------------------------------------------
-# Manifest'i oku (Python ile)
+# Parse manifest into a temp shell env file (no eval — safe approach)
 # ---------------------------------------------------------------------------
-eval "$(python3 - << PYEOF
-import yaml, sys, os
+SKILL_ENV_FILE=$(mktemp)
+trap 'rm -f "${SKILL_ENV_FILE}"' EXIT
 
-with open("${MANIFEST_FILE}") as f:
-    m = yaml.safe_load(f)
+python3 - "${MANIFEST_FILE}" "${DATA_DIR}" "${SKILL_ENV_FILE}" << 'PYEOF'
+import sys
+import os
+import re
+import yaml
 
-name         = m.get("name", "")
-repo_url     = m.get("source", {}).get("repo_url", "")
-branch       = m.get("source", {}).get("branch", "main")
-pinned       = m.get("source", {}).get("pinned_commit", "")
-subpath      = m.get("source", {}).get("subpath", "")
-target_dir   = m.get("install", {}).get("target_dir", "")
-ws_link      = m.get("install", {}).get("link_into_workspace", "")
-entry_point  = m.get("install", {}).get("entry_point", "skill.md")
-enabled      = str(m.get("policy", {}).get("enabled", False)).lower()
+manifest_path = sys.argv[1]
+data_dir      = sys.argv[2]
+env_file      = sys.argv[3]
 
-if not name:      print("echo 'HATA: manifest.name boş'; exit 1"); sys.exit(0)
-if not repo_url:  print("echo 'HATA: source.repo_url boş'; exit 1"); sys.exit(0)
-if not target_dir: print("echo 'HATA: install.target_dir boş'; exit 1"); sys.exit(0)
-if not pinned or "REPLACE_WITH" in pinned:
-    print("echo 'HATA: pinned_commit doldurulmamış — branch-only kurulum reddedildi'; exit 1")
-    sys.exit(0)
+try:
+    with open(manifest_path) as f:
+        m = yaml.safe_load(f)
+except Exception as e:
+    print(f"ERROR: Cannot parse manifest YAML: {e}", file=sys.stderr)
+    sys.exit(1)
 
-print(f'SKILL_NAME="{name}"')
-print(f'SKILL_REPO="{repo_url}"')
-print(f'SKILL_BRANCH="{branch}"')
-print(f'SKILL_COMMIT="{pinned}"')
-print(f'SKILL_SUBPATH="{subpath}"')
-print(f'SKILL_TARGET="{target_dir}"')
-print(f'SKILL_WS_LINK="{ws_link}"')
-print(f'SKILL_ENTRY="{entry_point}"')
-print(f'SKILL_ENABLED="{enabled}"')
+if not isinstance(m, dict):
+    print("ERROR: Manifest must be a YAML dict", file=sys.stderr)
+    sys.exit(1)
+
+# --- Extract and validate fields ---
+name         = str(m.get("name", "")).strip()
+source       = m.get("source", {}) or {}
+repo_url     = str(source.get("repo_url", "")).strip()
+branch       = str(source.get("branch", "main")).strip()
+pinned       = str(source.get("pinned_commit", "")).strip()
+subpath      = str(source.get("subpath", "")).strip()
+install      = m.get("install", {}) or {}
+target_dir   = str(install.get("target_dir", "")).strip()
+ws_link      = str(install.get("link_into_workspace", "")).strip()
+entry_point  = str(install.get("entry_point", "skill.md")).strip()
+policy       = m.get("policy", {}) or {}
+enabled      = str(policy.get("enabled", False)).lower()
+
+errors = []
+
+if not name:
+    errors.append("manifest.name is empty")
+
+if not repo_url:
+    errors.append("source.repo_url is empty")
+elif not repo_url.startswith(("https://", "git@", "ssh://")):
+    errors.append(f"source.repo_url has unexpected scheme: {repo_url!r}")
+
+if not target_dir:
+    errors.append("install.target_dir is empty")
+elif not target_dir.startswith("/"):
+    errors.append(f"install.target_dir must be an absolute path, got: {target_dir!r}")
+
+# Validate pinned_commit: must be 40-char hex SHA, no placeholders
+SHA_RE = re.compile(r'^[0-9a-f]{40}$', re.I)
+if not pinned:
+    errors.append("source.pinned_commit is empty — branch-only installs are rejected")
+elif "REPLACE" in pinned.upper() or "PLACEHOLDER" in pinned.upper():
+    errors.append(f"source.pinned_commit contains a placeholder: {pinned!r}")
+elif not SHA_RE.match(pinned):
+    errors.append(
+        f"source.pinned_commit must be a 40-character hex git SHA, got: {pinned!r} "
+        "(run 'git rev-parse <ref>' to get the full SHA)"
+    )
+
+# Validate workspace symlink is within DATA_DIR
+if ws_link and not ws_link.startswith(data_dir):
+    errors.append(
+        f"install.link_into_workspace must be under DATA_DIR ({data_dir!r}), "
+        f"got: {ws_link!r}"
+    )
+
+if errors:
+    print("Manifest validation FAILED:", file=sys.stderr)
+    for e in errors:
+        print(f"  ✗ {e}", file=sys.stderr)
+    sys.exit(1)
+
+# Write shell-safe env file (values are quoted with shlex)
+import shlex
+lines = [
+    f"SKILL_NAME={shlex.quote(name)}",
+    f"SKILL_REPO={shlex.quote(repo_url)}",
+    f"SKILL_BRANCH={shlex.quote(branch)}",
+    f"SKILL_COMMIT={shlex.quote(pinned)}",
+    f"SKILL_SUBPATH={shlex.quote(subpath)}",
+    f"SKILL_TARGET={shlex.quote(target_dir)}",
+    f"SKILL_WS_LINK={shlex.quote(ws_link)}",
+    f"SKILL_ENTRY={shlex.quote(entry_point)}",
+    f"SKILL_ENABLED={shlex.quote(enabled)}",
+]
+
+with open(env_file, "w") as f:
+    f.write("\n".join(lines) + "\n")
+
+print("Manifest validated OK")
 PYEOF
-)"
 
-log "  Skill     : ${SKILL_NAME}"
-log "  Repo      : ${SKILL_REPO}"
-log "  Commit    : ${SKILL_COMMIT}"
-log "  Hedef     : ${SKILL_TARGET}"
+# Source the safe env file (no eval of manifest content)
+# shellcheck source=/dev/null
+source "${SKILL_ENV_FILE}"
+
+log "  Skill   : ${SKILL_NAME}"
+log "  Repo    : ${SKILL_REPO}"
+log "  Commit  : ${SKILL_COMMIT}"
+log "  Target  : ${SKILL_TARGET}"
 
 # ---------------------------------------------------------------------------
-# Zaten kurulu mu?
+# Already installed check
 # ---------------------------------------------------------------------------
 if [[ -d "${SKILL_TARGET}" ]] && [[ "${FORCE}" != "--force" ]]; then
-  log "Skill zaten kurulu: ${SKILL_TARGET}"
-  log "Yeniden kurmak için --force kullanın."
+  log "Skill already installed: ${SKILL_TARGET}"
+  log "To reinstall: pass --force"
   exit 0
 fi
 
 if [[ -d "${SKILL_TARGET}" ]] && [[ "${FORCE}" == "--force" ]]; then
-  log "Mevcut kurulum siliniyor (--force)..."
+  log "Removing previous installation (--force)..."
   rm -rf "${SKILL_TARGET}"
 fi
 
 # ---------------------------------------------------------------------------
-# Git clone (sparse checkout — sadece subpath varsa)
+# Git clone with pinned commit
 # ---------------------------------------------------------------------------
-TMP_DIR="${DATA_DIR}/tmp/skill-install-${SKILL_NAME}-$$"
-mkdir -p "${TMP_DIR}"
+TMP_BASE="${DATA_DIR}/tmp"
+mkdir -p "${TMP_BASE}"
+TMP_DIR=$(mktemp -d "${TMP_BASE}/skill-install-XXXXXX")
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
-log "Repo klonlanıyor..."
-git clone --no-checkout --depth 1 --branch "${SKILL_BRANCH}" "${SKILL_REPO}" "${TMP_DIR}/repo" 2>&1
+log "Cloning repository..."
+git clone --no-checkout --depth 200 \
+    --branch "${SKILL_BRANCH}" "${SKILL_REPO}" "${TMP_DIR}/repo" 2>&1
 
-# Pinned commit'e geç
+log "Checking out pinned commit: ${SKILL_COMMIT}..."
 (
   cd "${TMP_DIR}/repo"
+  # Try direct fetch of the pinned commit first (faster for known SHAs)
   git fetch --depth 1 origin "${SKILL_COMMIT}" 2>&1 || true
   git checkout "${SKILL_COMMIT}" 2>&1
 )
-log "Pinned commit checkout: ${SKILL_COMMIT}"
 
-# Subpath varsa sadece onu kopyala
+# ---------------------------------------------------------------------------
+# INTEGRITY: Verify HEAD matches pinned_commit
+# ---------------------------------------------------------------------------
+log "Verifying commit integrity..."
+ACTUAL_HEAD=$(cd "${TMP_DIR}/repo" && git rev-parse HEAD)
+
+if [[ "${ACTUAL_HEAD}" != "${SKILL_COMMIT}" ]]; then
+  err "========================================================"
+  err "INTEGRITY CHECK FAILED"
+  err "  Expected : ${SKILL_COMMIT}"
+  err "  Actual   : ${ACTUAL_HEAD}"
+  err ""
+  err "The checked-out commit does not match pinned_commit."
+  err "Possible causes:"
+  err "  - pinned_commit is a short SHA (must be 40 chars)"
+  err "  - Git history was rewritten (force-push)"
+  err "  - Network/MITM tampering"
+  err ""
+  err "Skill installation ABORTED for security."
+  err "========================================================"
+  exit 1
+fi
+
+log "  Commit integrity verified ✓ (${SKILL_COMMIT:0:12}...)"
+
+# ---------------------------------------------------------------------------
+# Copy files to target
+# ---------------------------------------------------------------------------
 mkdir -p "${SKILL_TARGET}"
+
 if [[ -n "${SKILL_SUBPATH}" ]]; then
   SRC_PATH="${TMP_DIR}/repo/${SKILL_SUBPATH}"
   if [[ ! -d "${SRC_PATH}" ]]; then
-    die "Subpath bulunamadı: ${SKILL_SUBPATH} (repo içinde)"
+    die "Subpath not found in repo: '${SKILL_SUBPATH}'"
   fi
   cp -r "${SRC_PATH}/." "${SKILL_TARGET}/"
 else
   cp -r "${TMP_DIR}/repo/." "${SKILL_TARGET}/"
 fi
-
-log "Dosyalar kopyalandı: ${SKILL_TARGET}"
+log "Files copied to: ${SKILL_TARGET}"
 
 # ---------------------------------------------------------------------------
-# Workspace symlink (isteğe bağlı)
+# Workspace symlink (with path validation)
 # ---------------------------------------------------------------------------
 if [[ -n "${SKILL_WS_LINK}" ]]; then
-  mkdir -p "$(dirname "${SKILL_WS_LINK}")"
+  # Path validation — must be under DATA_DIR (already checked in Python)
+  LINK_PARENT=$(dirname "${SKILL_WS_LINK}")
+  mkdir -p "${LINK_PARENT}"
   rm -f "${SKILL_WS_LINK}" 2>/dev/null || true
 
   ENTRY_FILE="${SKILL_TARGET}/${SKILL_ENTRY}"
@@ -132,35 +244,44 @@ if [[ -n "${SKILL_WS_LINK}" ]]; then
     log "Workspace symlink: ${SKILL_WS_LINK} → ${ENTRY_FILE}"
   else
     ln -sf "${SKILL_TARGET}" "${SKILL_WS_LINK}"
-    log "Workspace symlink (klasör): ${SKILL_WS_LINK} → ${SKILL_TARGET}"
+    log "Workspace symlink (dir): ${SKILL_WS_LINK} → ${SKILL_TARGET}"
   fi
 fi
 
 # ---------------------------------------------------------------------------
-# Manifest'e installed_at yaz
+# Write install record to manifest
 # ---------------------------------------------------------------------------
-python3 - << PYEOF
+python3 - "${MANIFEST_FILE}" "${SKILL_COMMIT}" "${ACTUAL_HEAD}" << 'PYEOF'
 import yaml, datetime, sys
 
-path = "${MANIFEST_FILE}"
+path        = sys.argv[1]
+expected_sha = sys.argv[2]
+actual_sha   = sys.argv[3]
+
 with open(path) as f:
     m = yaml.safe_load(f)
 
-m.setdefault("metadata", {})["installed_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+m.setdefault("metadata", {}).update({
+    "installed_at":    datetime.datetime.utcnow().isoformat() + "Z",
+    "installed_sha":   actual_sha,
+    "integrity_check": "passed",
+})
 
 with open(path, "w") as f:
     yaml.dump(m, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
-print("[SKILL] Manifest güncellendi: installed_at")
+print(f"Manifest updated: installed_at + integrity_check=passed")
 PYEOF
 
 # ---------------------------------------------------------------------------
-# Sonuç
+# Done
 # ---------------------------------------------------------------------------
 log "========================================"
-log " Skill kurulumu tamamlandı ✓"
-log "   ${SKILL_NAME} @ ${SKILL_COMMIT}"
+log " Skill installation complete ✓"
+log "   ${SKILL_NAME}"
+log "   Commit  : ${SKILL_COMMIT}"
+log "   Target  : ${SKILL_TARGET}"
 if [[ "${SKILL_ENABLED}" == "false" ]]; then
-  log " UYARI: policy.enabled=false — bu skill varsayılan pasif."
-  log " Aktifleştirmek için manifest'te enabled: true yapın."
+  warn "policy.enabled=false — this skill is installed but inactive."
+  warn "To activate: set enabled: true in the manifest."
 fi
 log "========================================"
