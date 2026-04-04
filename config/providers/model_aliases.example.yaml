@@ -1,0 +1,94 @@
+# /data/providers/model_aliases.yaml
+# CANONICAL — Model alias tablosu. Agent prompt'larında bu isimler kullanılır.
+# Ham model adları (örn: anthropic/claude-sonnet-4-5) ASLA prompt'ta geçmez.
+# Provider değişimi sadece bu dosyada yapılır — prompt'lar bozulmaz.
+# =============================================================================
+
+version: "1"
+
+aliases:
+
+  # ---------------------------------------------------------------------------
+  # Genel amaç — hızlı routing, parsing, classification
+  # ---------------------------------------------------------------------------
+  general-fast:
+    provider: openrouter
+    model: openai/gpt-4.1-mini
+    max_tokens: 4096
+    temperature: 0.3
+
+  # ---------------------------------------------------------------------------
+  # Derin analiz — çok adımlı akıl yürütme, strateji yorumlama
+  # ---------------------------------------------------------------------------
+  analysis-deep:
+    provider: openrouter
+    model: deepseek/deepseek-r1
+    max_tokens: 16384
+    temperature: 0.1
+
+  # ---------------------------------------------------------------------------
+  # Hızlı trade kararı — düşük latency kritik
+  # ---------------------------------------------------------------------------
+  trade-fast:
+    provider: nvidia_nim
+    model: deepseek-ai/deepseek-r1-0528-hf
+    max_tokens: 2048
+    temperature: 0.1
+
+  # ---------------------------------------------------------------------------
+  # Güvenli trade kararı — yüksek doğruluk, execution için önerilen default
+  # ---------------------------------------------------------------------------
+  trade-safe:
+    provider: openrouter
+    model: anthropic/claude-sonnet-4-5
+    max_tokens: 8192
+    temperature: 0.0
+
+  # ---------------------------------------------------------------------------
+  # Maksimum akıl yürütme — karmaşık multi-step strateji
+  # ---------------------------------------------------------------------------
+  reasoning-max:
+    provider: openrouter
+    model: deepseek/deepseek-r1
+    max_tokens: 32768
+    temperature: 0.0
+
+  # ---------------------------------------------------------------------------
+  # Ucuz araştırma — veri toplama, haber özeti, hızlı sınıflandırma
+  # ---------------------------------------------------------------------------
+  research-cheap:
+    provider: openrouter
+    model: meta-llama/llama-3.3-8b-instruct:free
+    max_tokens: 8192
+    temperature: 0.5
+
+  # ---------------------------------------------------------------------------
+  # Genel akıllı — Claude, yüksek anlayış kapasitesi
+  # ---------------------------------------------------------------------------
+  general-smart:
+    provider: openrouter
+    model: anthropic/claude-sonnet-4-5
+    max_tokens: 8192
+    temperature: 0.3
+
+  # ---------------------------------------------------------------------------
+  # Çin kaynaklı araştırma — Kimi/Moonshot, Çince kaynak analizi
+  # ---------------------------------------------------------------------------
+  cn-research:
+    provider: kimi
+    model: kimi-latest
+    max_tokens: 16384
+    temperature: 0.3
+
+# ---------------------------------------------------------------------------
+# Profile bazlı varsayılan alias'lar
+# render-config.py bu bloğu okuyarak her profile için default model atar.
+# ---------------------------------------------------------------------------
+profiles:
+  analysis:
+    default_alias: analysis-deep     # Derin akıl yürütme
+    fallback_alias: general-smart    # Ana model erişilemezse
+
+  execution:
+    default_alias: trade-safe        # Güvenli, yüksek doğruluk
+    fallback_alias: general-fast     # Hızlı fallback

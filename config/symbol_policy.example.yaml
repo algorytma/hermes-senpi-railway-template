@@ -1,0 +1,25 @@
+# /data/risk/symbol_policy.yaml
+# CANONICAL — Sembol bazlı özel kısıtlamalar (risk_policy.yaml'ı tamamlar)
+# =============================================================================
+
+version: "1"
+
+symbols:
+  BTC:
+    max_position_size_usd: 300
+    max_leverage: 3
+    allowed_directions: [long, short]
+    notes: "Ana sembol, en yüksek likidite"
+
+  ETH:
+    max_position_size_usd: 200
+    max_leverage: 2
+    allowed_directions: [long, short]
+    notes: "İkinci öncelik"
+
+  SOL:
+    max_position_size_usd: 100
+    max_leverage: 1
+    allowed_directions: [long]          # SOL shortları şimdilik kapalı
+    requires_human_approval: true
+    notes: "Düşük likidite, sadece long, manuel onaylı"

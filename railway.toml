@@ -1,0 +1,41 @@
+# =============================================================================
+# railway.toml — Railway Deploy Konfigürasyonu
+# https://docs.railway.com/reference/config-as-code
+# =============================================================================
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[build.args]
+HERMES_VERSION = "v0.6.0"        # Güncel pinned release
+
+[deploy]
+startCommand = "/app/bootstrap/prestart.sh"
+healthcheckPath = "/"
+healthcheckTimeout = 60
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# ---------------------------------------------------------------------------
+# Ortam değişkeni şablonu — Railway'de elle tanımlanacak değişkenler:
+#
+# ZORUNLU:
+#   OPENROUTER_API_KEY     — OpenRouter API anahtarı
+#   SENPI_AUTH_TOKEN       — Senpi platform auth tokeni
+#   ACTIVE_PROFILE         — analysis (başlangıç) | execution
+#   DATA_DIR               — /data (Railway volume mount path)
+#
+# SAĞLAYICI (en az biri aktif olmalı):
+#   NVIDIA_API_KEY         — NVIDIA NIM API
+#   DASHSCOPE_API_KEY      — Alibaba DashScope (Qwen)
+#   OPENCODE_API_KEY       — Özel OpenAI-compatible gateway
+#   OPENCODE_BASE_URL      — Özel gateway URL
+#
+# OPSİYONEL:
+#   BRAVE_API_KEY          — Brave Search (mcp_registry.yaml'da enable edilince)
+#
+# ---------------------------------------------------------------------------
+# NOT: Bu dosyaya API key DEĞERLERİ yazılmaz.
+# Değerler Railway dashboard'unda Variables sekmesinden tanımlanır.
+# ---------------------------------------------------------------------------

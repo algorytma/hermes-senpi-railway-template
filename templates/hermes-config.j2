@@ -1,0 +1,54 @@
+{# templates/hermes-config.j2
+   Jinja2 template — render-config.py bu template'i doldurar
+   config.generated.yaml üretir.
+   
+   Değişkenler:
+     profile          : "analysis" | "execution"
+     default_model    : alias'tan çözümlenen model adı
+     default_provider : provider adı
+     base_url         : provider base URL
+     api_key          : çözümlenmiş API key (env'den)
+     workspace_dir    : /data/workspace
+     hermes_home      : /data/.hermes/<profile>
+     mcp_servers      : dict
+     generated_at     : ISO timestamp
+#}
+# ===========================================================================
+# GENERATED — Elle düzenleme. render-config.py tarafından üretilmiştir.
+# Profile  : {{ profile }}
+# Üretildi : {{ generated_at }}
+# Kaynak   : providers/provider_registry.yaml + providers/model_aliases.yaml
+#             mcp/mcp_registry.yaml (profile={{ profile }} filtrelenmiş)
+# ===========================================================================
+
+model: "{{ default_model }}"
+provider: "{{ default_provider }}"
+base_url: "{{ base_url }}"
+api_key: "{{ api_key }}"
+
+workspace: "{{ workspace_dir }}"
+
+{% if mcp_servers %}
+mcp_servers:
+{% for name, server in mcp_servers.items() %}
+  {{ name }}:
+    transport: {{ server.transport }}
+    command: {{ server.command }}
+    args: {{ server.args | tojson }}
+{% if server.env is defined and server.env %}
+    env:
+{% for k, v in server.env.items() %}
+      {{ k }}: "{{ v }}"
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% else %}
+# Aktif MCP sunucusu yok (profile={{ profile }})
+mcp_servers: {}
+{% endif %}
+
+# Profile metadata (Hermes tarafından ignore edilir, sadece debug için)
+_meta:
+  generated_at: "{{ generated_at }}"
+  profile: "{{ profile }}"
+  generator: "render-config.py"

@@ -1,0 +1,43 @@
+# =============================================================================
+# Hermes-Senpi Trader — .gitignore
+# =============================================================================
+
+# Gizli bilgiler — ASLA commit etme
+.env
+*.key
+*.token
+secrets.yaml
+
+# Üretilmiş config dosyaları
+*.generated.yaml
+*.generated.json
+
+# Volume verisi — git'e gitmez
+/data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Backup arşivleri (büyük dosyalar)
+*.tar.gz
+*.tar.bz2
+*.zip

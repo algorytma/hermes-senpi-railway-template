@@ -1,0 +1,50 @@
+# /data/providers/profiles.yaml → config/profiles.example.yaml
+# CANONICAL — Profile bazlı model seçimi ve davranış konfigürasyonu.
+# render-config.py bu dosyayı okuyarak her profile için default model atar.
+# =============================================================================
+
+version: "1"
+
+profiles:
+
+  analysis:
+    description: "Piyasa analizi, araştırma ve trade önerisi üretme profili"
+    active: true                         # Varsayılan açık profil
+
+    # Model tercihleri (model_aliases.yaml'daki alias'lar)
+    default_alias: analysis-deep         # Derin akıl yürütme gerektiren görevler
+    fallback_alias: general-fast         # Ana model erişilemezse
+
+    # Hangi MCP'ler bu profilde aktif?
+    # (mcp_registry.yaml'daki profiles: [analysis] ile çakışır)
+    allowed_mcp_tags: [filesystem, workspace, search, research]
+    denied_mcp_tags: [trading, execution-only]
+
+    # Hermes davranış ayarları
+    hermes:
+      max_turns: 20
+      allow_shell_exec: false
+      workspace_dir: /data/workspace
+
+  execution:
+    description: "Risk-kontrollü trade execution profili"
+    active: false                        # VARSAYILAN KAPALI — elle açılır
+
+    # Model tercihleri
+    default_alias: trade-safe            # Yüksek doğruluk, düşük temperature
+    fallback_alias: general-fast
+
+    # Execution profilinde sadece seçili MCP'ler
+    allowed_mcp_tags: [trading, filesystem, workspace]
+    denied_mcp_tags: [search, research, web]
+
+    # Execution güvenlik ayarları (risk_policy.yaml ile birlikte çalışır)
+    hermes:
+      max_turns: 10                      # Execution'da daha kısa döngüler
+      allow_shell_exec: false
+      workspace_dir: /data/workspace
+
+    # Execution profili açılış koşulları
+    requires:
+      - risk_policy_valid: true          # risk_policy.yaml geçerli olmalı
+      - dry_run_test_passed: false       # (opsiyonel) dry run test geçilmiş olmalı

@@ -1,0 +1,39 @@
+# /data/skills/manifests/senpi-stop-manager.yaml
+# CANONICAL — Stop yönetimi skill manifesti
+# =============================================================================
+
+version: "1"
+name: senpi-stop-manager
+display_name: "Senpi Stop Manager"
+description: >
+  Açık pozisyonlar için trailing stop ve stop-loss güncelleme stratejilerini
+  yöneten execution skill'i.
+  ÖNEMLİ: Bu skill gerçek emirler üretebilir — execution profile + insan onayı zorunlu.
+
+source:
+  repo_url: https://github.com/Senpi-ai/senpi-skills
+  branch: main
+  pinned_commit: "REPLACE_WITH_REAL_COMMIT_HASH"
+  subpath: stop-manager
+
+install:
+  target_dir: /data/skills/installed/senpi-stop-manager
+  link_into_workspace: /data/workspace/skills/senpi-stop-manager
+  entry_point: skill.md
+
+policy:
+  enabled: false                         # VARSAYILAN KAPALI — yüksek risk
+  profile: execution
+  requires_human_approval: true          # Her stop değişikliği onaylı olmalı
+  dry_run_override: true                 # Skill hiçbir koşulda dry_run=false yapamaz
+
+metadata:
+  category: execution-risk
+  subcategory: stop-management
+  risk_rating: high
+  tags: [stop-loss, trailing-stop, execution, risk-management]
+  installed_at: null
+  last_updated: null
+  notes: >
+    Bu skill yalnızca risk_policy.yaml'da allow_reduce_only_without_confirmation: true
+    ve onaylı bir açık pozisyon varsa işlem yapabilir.

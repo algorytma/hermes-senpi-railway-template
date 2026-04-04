@@ -1,0 +1,69 @@
+# /data/risk/risk_policy.yaml
+# CANONICAL — Sistem risk merkezi. Bu dosya olmadan execution profili BAŞLAMAZ.
+#
+# MODE AÇIKLAMALARI:
+#   copilot   : Tüm aksiyonlar için insan onayı gerekir (BAŞLANGIÇ MODU)
+#   semi-auto : Küçük/reduce-only işlemler otomatik, potansiyel zararı yüksek olanlar onaylı
+#   auto      : Tam otonom (ÖNERİLMEZ — risk policy sertleştirilmeden geçilmez)
+#
+# İLK KURULUM: mode=copilot ile başlayın.
+# =============================================================================
+
+version: "1"
+mode: copilot
+
+# ---------------------------------------------------------------------------
+# Portföy seviyesi limitler
+# ---------------------------------------------------------------------------
+portfolio:
+  max_daily_loss_usd: 100          # Günlük toplam zarar eşiği
+  max_daily_loss_pct: 2.0          # Portföyün yüzdesi olarak günlük limit
+  max_open_positions: 3            # Aynı anda açık olabilecek maksimum pozisyon
+  max_gross_exposure_usd: 1500     # Toplam pozisyon büyüklüğü (long + short)
+  max_single_position_pct: 25      # Tek pozisyon portföyün en fazla %25'i
+
+# ---------------------------------------------------------------------------
+# İşlem seviyesi limitler
+# ---------------------------------------------------------------------------
+trading:
+  max_position_size_usd: 300       # Tekil işlem büyüklüğü üst sınırı
+  max_leverage: 3                  # Maksimum kaldıraç (3x)
+  cooldown_seconds_after_loss: 1800  # Zarardan sonra 30 dakika soğuma
+  min_confidence_score: 0.75       # Agent bu skoru üretemezse işlem yok
+
+  # Bu durumların herhangi biri gerçekleşirse insan onayı zorunlu:
+  require_human_approval_for:
+    - market_open             # Her yeni pozisyon açma
+    - leverage_gt_2           # 2x üzeri kaldıraç
+    - new_symbol              # İlk kez işlem yapılan sembol
+    - loss_gt_50_usd          # Tekil zarar potansiyeli 50 USD üzerindeyse
+
+# ---------------------------------------------------------------------------
+# Sembol politikası
+# ---------------------------------------------------------------------------
+symbols:
+  allowlist:
+    - "BTC"
+    - "ETH"
+    - "SOL"
+  denylist: []
+  default_action: deny             # Allowlist dışı her şey reddedilir
+
+# ---------------------------------------------------------------------------
+# Execution güvenlik sınırları
+# ---------------------------------------------------------------------------
+execution:
+  dry_run_default: true            # BAŞLANGIÇTA HER ŞEY DRY_RUN
+  allow_reduce_only_without_confirmation: true   # Pozisyon kapatma onaysız olabilir
+  allow_open_new_position: false   # YENİ POZİSYON AÇMA — başlangıçta KAPALI
+  allow_increase_position: false   # Mevcut pozisyonu büyütme KAPALI
+  allow_leverage_change: false     # Kaldıraç değişimi KAPALI
+
+# ---------------------------------------------------------------------------
+# Audit ve kayıt
+# ---------------------------------------------------------------------------
+audit:
+  write_trade_journal: true        # Her trade kararı /data/logs/trades/ altına yazılır
+  write_decision_trace: true       # Agent karar gerekçesi de loglanır
+  journal_path: /data/logs/trades/
+  retention_days: 90

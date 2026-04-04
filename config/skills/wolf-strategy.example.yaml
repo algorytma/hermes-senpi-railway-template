@@ -1,0 +1,51 @@
+# /data/skills/manifests/wolf-strategy.yaml
+# CANONICAL — Skill yaşam döngüsü bu dosyadan yönetilir.
+#
+# KURULUM NOTU:
+#   Bu dosyayı /data/skills/manifests/ altına kopyalayın.
+#   Kurulum için: bootstrap skill-install komutunu kullanın.
+#
+# GÜVENLİK NOTU:
+#   - pinned_commit ZORUNLUDUR, boş bırakılamaz.
+#   - branch-only kurulum kabul edilmez.
+#   - enabled varsayılan olarak false, manuel onay gerekir.
+# =============================================================================
+
+version: "1"
+name: wolf-strategy
+display_name: "Wolf Strategy"
+description: >
+  Trend-following momentum strategy for BTC and ETH perpetual futures.
+  Identifies high-probability momentum entries using volume confirmation
+  and multi-timeframe trend alignment.
+
+source:
+  repo_url: https://github.com/Senpi-ai/senpi-skills
+  branch: main
+  # ZORUNLU: pinned_commit boş bırakılamaz ve branch-only kurulum kabul edilmez.
+  # Kurulum öncesi gerçek commit hash'ini aşağıya yazın:
+  pinned_commit: "REPLACE_WITH_REAL_COMMIT_HASH"
+  subpath: wolf-strategy
+
+install:
+  target_dir: /data/skills/installed/wolf-strategy
+  link_into_workspace: /data/workspace/skills/wolf-strategy
+  entry_point: skill.md                # workspace'e expose edilecek ana dosya
+
+policy:
+  enabled: false                       # VARSAYILAN KAPALI — manuel aktivasyon gerekir
+  profile: analysis                    # analysis veya execution
+  requires_human_approval: true        # her öneri için kullanıcı onayı
+  dry_run_override: true               # skill kendi dry_run=false yapamaz
+
+metadata:
+  category: trading
+  subcategory: momentum
+  risk_rating: high
+  tags: [trend-following, momentum, btc, eth, perpetuals]
+  installed_at: null                   # kurulunca doldurulur
+  last_updated: null
+  installed_by: bootstrap
+  notes: >
+    İlk gerçek skill. Execution'da varsayılan pasif.
+    Aktivasyon için: policy.enabled=true ve risk_policy onaylı olmalı.

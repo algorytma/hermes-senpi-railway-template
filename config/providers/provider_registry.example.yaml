@@ -1,0 +1,75 @@
+# /data/providers/provider_registry.yaml
+# CANONICAL — Sağlayıcı listesi. Bootstrap tarafından config.generated.yaml'a işlenir.
+# Bu dosyayı elle düzenleyin. Hermes'e doğrudan verilmez.
+# =============================================================================
+
+version: "1"
+
+providers:
+
+  openrouter:
+    type: openai_compatible
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: OPENROUTER_API_KEY     # Railway env'de tanımlı olmalı
+    enabled: true
+    priority: 1                          # Düşük sayı = yüksek öncelik (fallback için)
+    supports_tools: true
+    tags: [general, fallback, reasoning]
+
+  nvidia_nim:
+    type: openai_compatible
+    base_url: "https://integrate.api.nvidia.com/v1"
+    api_key_env: NVIDIA_API_KEY
+    enabled: true
+    priority: 2
+    supports_tools: true
+    tags: [fast, inference, nim]
+
+  opencode:
+    type: openai_compatible
+    base_url_env: OPENCODE_BASE_URL      # URL de env'den gelir (private gateway)
+    api_key_env: OPENCODE_API_KEY
+    enabled: false                       # Özel gateway kurulduğunda true yapın
+    priority: 3
+    supports_tools: true
+    tags: [local, private, gateway]
+
+  dashscope:
+    type: openai_compatible
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    api_key_env: DASHSCOPE_API_KEY
+    enabled: false                       # Qwen modelleri için aktif edin
+    priority: 4
+    supports_tools: true
+    tags: [china, qwen, alibaba]
+    notes: "Qwen family — qwen-max, qwen-plus"
+
+  zai:
+    type: openai_compatible
+    base_url_env: ZAI_BASE_URL
+    api_key_env: ZAI_API_KEY
+    enabled: false
+    priority: 5
+    supports_tools: true
+    tags: [china, glm, z-ai]
+    notes: "GLM/Z.AI — GLM-4-Flash vb."
+
+  kimi:
+    type: openai_compatible
+    base_url_env: KIMI_BASE_URL
+    api_key_env: KIMI_API_KEY
+    enabled: false
+    priority: 6
+    supports_tools: true
+    tags: [china, moonshot, kimi]
+    notes: "Moonshot/Kimi — kimi-latest vb."
+
+  minimax:
+    type: openai_compatible
+    base_url_env: MINIMAX_BASE_URL
+    api_key_env: MINIMAX_API_KEY
+    enabled: false
+    priority: 7
+    supports_tools: true
+    tags: [china, minimax]
+    notes: "MiniMax modelleri"

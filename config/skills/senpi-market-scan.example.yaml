@@ -1,0 +1,36 @@
+# /data/skills/manifests/senpi-market-scan.yaml
+# CANONICAL — Market tarama skill manifesti
+# =============================================================================
+
+version: "1"
+name: senpi-market-scan
+display_name: "Senpi Market Scan"
+description: >
+  Hyperliquid piyasasında BTC, ETH ve SOL için momentum, hacim anomalisi
+  ve trend dönüşü sinyallerini tarayan analiz skill'i.
+  Trade önermez — sadece gözlem ve sinyal raporu üretir.
+
+source:
+  repo_url: https://github.com/Senpi-ai/senpi-skills
+  branch: main
+  pinned_commit: "REPLACE_WITH_REAL_COMMIT_HASH"
+  subpath: market-scan
+
+install:
+  target_dir: /data/skills/installed/senpi-market-scan
+  link_into_workspace: /data/workspace/skills/senpi-market-scan
+  entry_point: skill.md
+
+policy:
+  enabled: true                          # Analiz riski düşük — başlangıçta açık olabilir
+  profile: analysis
+  requires_human_approval: false         # Gözlem skill'i — otomatik çalışabilir
+  dry_run_override: false                # Bu skill execution yapmaz, dry_run geçersiz
+
+metadata:
+  category: market-intelligence
+  subcategory: scanner
+  risk_rating: low
+  tags: [scan, momentum, volume, analysis-only]
+  installed_at: null
+  last_updated: null

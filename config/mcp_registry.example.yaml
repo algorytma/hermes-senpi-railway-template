@@ -1,0 +1,103 @@
+# /data/mcp/mcp_registry.yaml
+# CANONICAL — bootstrap, mcp.generated.yaml üretmek için bu dosyayı kullanır.
+# Bu dosyayı elle düzenleyin. Hermes'e doğrudan verilmez.
+#
+# Alanlar:
+#   enabled           : bool — false ise hiç yüklenmez
+#   transport         : stdio | sse
+#   command           : çalıştırılacak komut (override edilebilir)
+#   args              : komut argümanları listesi
+#   env               : ortam değişkenleri (${ENV_VAR} formatında referans verilebilir)
+#   tags              : sınıflandırma etiketleri
+#   risk_level        : low | medium | high | critical
+#   profiles          : bu MCP'nin dahil olduğu profiller [analysis, execution]
+#   requires_confirmation : true ise her tool çağrısında onay ister
+#   permissions       : [read, write] — opsiyonel kısıtlama
+# =============================================================================
+
+version: "1"
+
+servers:
+
+  # ---------------------------------------------------------------------------
+  # Senpi MCP — Hyperliquid trading execution
+  # UYARI: Sadece execution profilinde aktif.
+  # NOT: npm paketi (@senpi-ai/mcp-server) henüz doğrulanmamış.
+  #      command/args/env alanlarını kendi MCP kurulumunuza göre override edin.
+  # ---------------------------------------------------------------------------
+  senpi:
+    enabled: true
+    transport: stdio
+    command: npx                                # override: kendi yolunuzu yazın
+    args:
+      - "-y"
+      - "@senpi-ai/mcp-server"                 # override: doğrulanmış paket adı
+    env:
+      SENPI_AUTH_TOKEN: "${SENPI_AUTH_TOKEN}"   # Railway env'den gelir
+    tags: [trading, hyperliquid, senpi, execution-only]
+    risk_level: high
+    profiles: [execution]                       # ANALİZDE AÇILMAZ — kasıtlı tasarım
+    requires_confirmation: true
+
+  # ---------------------------------------------------------------------------
+  # Filesystem — /data/workspace erişimi (okuma/yazma)
+  # ---------------------------------------------------------------------------
+  filesystem_workspace:
+    enabled: true
+    transport: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "/data/workspace"
+    tags: [local, filesystem, workspace, read-write]
+    risk_level: low
+    profiles: [analysis, execution]
+
+  # ---------------------------------------------------------------------------
+  # Filesystem — /data/logs erişimi (sadece okuma)
+  # Agent log'ları inceleyebilir ama yazamaz.
+  # ---------------------------------------------------------------------------
+  filesystem_logs:
+    enabled: true
+    transport: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "/data/logs"
+    tags: [local, filesystem, audit, read-only]
+    risk_level: low
+    profiles: [analysis, execution]
+    permissions: [read]
+
+  # ---------------------------------------------------------------------------
+  # Brave Search — Web araştırma (opsiyonel, varsayılan kapalı)
+  # BRAVE_API_KEY env var'ı gerektirir.
+  # ---------------------------------------------------------------------------
+  brave_search:
+    enabled: false                               # kullanmak için true yapın
+    transport: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-brave-search"
+    env:
+      BRAVE_API_KEY: "${BRAVE_API_KEY}"
+    tags: [search, research, web, analysis-only]
+    risk_level: low
+    profiles: [analysis]
+
+  # ---------------------------------------------------------------------------
+  # Fetch — URL içeriği okuma (opsiyonel, varsayılan kapalı)
+  # ---------------------------------------------------------------------------
+  fetch:
+    enabled: false
+    transport: stdio
+    command: npx
+    args:
+      - "-y"
+      - "@modelcontextprotocol/server-fetch"
+    tags: [web, fetch, research, analysis-only]
+    risk_level: low
+    profiles: [analysis]
