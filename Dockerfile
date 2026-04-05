@@ -91,11 +91,11 @@ RUN echo "{\"build_date\":\"${BUILD_DATE}\",\"git_sha\":\"${GIT_SHA}\",\"hermes_
     > /app/build-info.json
 
 # ---------------------------------------------------------------------------
-# Healthcheck
-# NOTE: /data volume is mounted by Railway — no VOLUME directive here.
-# ---------------------------------------------------------------------------
-HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
-    CMD test -f /data/.runtime/version.json || exit 1
+# Healthcheck: verify hermes process is running.
+# Uses a generous start-period (180s) to allow bootstrap to complete.
+# NOTE: No healthcheckPath in railway.toml — Railway uses process health.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
+    CMD pgrep -f hermes > /dev/null || test -f /data/.runtime/version.json
 
 # ---------------------------------------------------------------------------
 # Entrypoint

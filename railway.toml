@@ -13,9 +13,8 @@ dockerfilePath = "Dockerfile"
 HERMES_GIT_REF = "main"
 
 [deploy]
-startCommand = "/app/bootstrap/prestart.sh"
-healthcheckPath = "/"
-healthcheckTimeout = 60
+# No healthcheckPath — hermes is not an HTTP server.
+# Railway uses process health (is PID 1 alive?) when no path is set.
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
