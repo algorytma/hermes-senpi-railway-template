@@ -8,9 +8,9 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [build.args]
-# Hermes-agent is installed from source (no pre-built Docker image exists).
-# HERMES_BRANCH pins which git branch to install from.
-HERMES_BRANCH = "main"
+# Git ref (branch or tag) to clone hermes-agent from.
+# e.g. "main", "v0.6.0", or a full commit SHA
+HERMES_GIT_REF = "main"
 
 [deploy]
 startCommand = "/app/bootstrap/prestart.sh"
