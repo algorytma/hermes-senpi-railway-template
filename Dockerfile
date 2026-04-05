@@ -73,10 +73,10 @@ RUN echo "{\"hermes_version\":\"${HERMES_VERSION}\",\"build_date\":\"${BUILD_DAT
     > /app/build-info.json
 
 # ---------------------------------------------------------------------------
-# Volume ve env ayarları
+# Env defaults
+# NOTE: Volume is mounted by Railway at /data — do NOT declare VOLUME here.
+#       See: https://docs.railway.com/volumes/overview
 # ---------------------------------------------------------------------------
-# VOLUME ["/data"]
-
 ENV DATA_DIR=/data
 ENV ACTIVE_PROFILE=analysis
 ENV HERMES_VERSION=${HERMES_VERSION}
