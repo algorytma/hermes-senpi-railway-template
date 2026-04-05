@@ -1,5 +1,3 @@
-<img src="https://r2cdn.perplexity.ai/pplx-full-logo-primary-dark%402x.png" style="height:64px;margin-right:32px"/>
-
 # Uygulama notu kısmındaki gibi ilerleyelim. 2 aşamalı, şimdi 1. aşama için gerekenlere başla,
 
 Tamam, 1. aşamada kod yazdırmaya başlamadan önce **mimari kararları, klasör ağacını, config yüzeyini ve operasyon kurallarını** netleştireceğiz. Bu yaklaşım doğru çünkü OpenClaw/Hermes benzeri yapılarda asıl kırılma noktası genelde kod değil; state, workspace, MCP kayıtları ve update/migration akışının baştan tasarlanmamış olmasıdır.[^1][^2][^3]
@@ -376,7 +374,7 @@ Antigravity çıktısını bana getir; ben de onu şu açılardan denetleyeyim:
 - gerçek fon yönetimine uygun risk sınırları.
 <span style="display:none">[^17][^18][^19][^20][^21][^22][^23][^24]</span>
 
-<div align="center">⁂</div>
+
 
 [^1]: https://docs.openclaw.ai/install/railway
 

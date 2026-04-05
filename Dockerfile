@@ -75,7 +75,7 @@ RUN echo "{\"hermes_version\":\"${HERMES_VERSION}\",\"build_date\":\"${BUILD_DAT
 # ---------------------------------------------------------------------------
 # Volume ve env ayarları
 # ---------------------------------------------------------------------------
-VOLUME ["/data"]
+# VOLUME ["/data"]
 
 ENV DATA_DIR=/data
 ENV ACTIVE_PROFILE=analysis
