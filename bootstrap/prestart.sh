@@ -118,13 +118,30 @@ python3 /app/scripts/render-config.py \
 
 log "Config generation complete."
 
+log "Step 6: Environment variable propagation..."
+ENV_FILE="${HERMES_HOME}/.env"
+echo "# Managed by prestart.sh" > "${ENV_FILE}"
+
+# Telegram ve Gateway değişkenlerini .env'ye aktar (Hermes Gateway .env'den okur)
+for key in TELEGRAM_BOT_TOKEN TELEGRAM_ALLOWED_USERS TELEGRAM_ALLOW_ALL_USERS; do
+  val="${!key:-}"
+  if [[ -n "$val" ]]; then
+    printf '%s=%s\n' "$key" "$val" >> "${ENV_FILE}"
+  fi
+done
+
 # ---------------------------------------------------------------------------
-# 6. Launch hermes
+# 7. Launch hermes
 # ---------------------------------------------------------------------------
-log "Step 6: Launching hermes runtime..."
+log "Step 7: Launching hermes runtime..."
 log "=========================================="
 log " Bootstrap Complete — Starting Hermes"
 log "=========================================="
+
+# Eğer çalıştırılacak ekstra argüman yoksa varsayılan olarak "gateway" modunda başlat
+if [[ $# -eq 0 ]]; then
+  set -- "gateway"
+fi
 
 # Use generated config if it exists, otherwise let hermes use defaults
 if [[ -f "${HERMES_HOME}/config.generated.yaml" ]]; then
