@@ -8,7 +8,7 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [build.args]
-HERMES_VERSION = "v0.6.0"        # Güncel pinned release
+HERMES_VERSION = "latest"         # Docker Hub: nousresearch/hermes-agent
 
 [deploy]
 startCommand = "/app/bootstrap/prestart.sh"
