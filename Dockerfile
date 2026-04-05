@@ -1,55 +1,74 @@
 # =============================================================================
 # Hermes-Senpi Trader — Dockerfile
 # =============================================================================
-# Base: nousresearch/hermes-agent (Docker Hub, official image)
-# Runtime: ephemeral container, persistent state at /data (Railway Volume)
+# Base: ubuntu:22.04
+# Hermes-agent is installed from source via official install.sh
+# (no official pre-built Docker image exists)
 #
-# Build:
-#   docker build --build-arg HERMES_VERSION=latest -t hermes-senpi-trader .
-#
-# Run locally:
-#   docker run --rm -e ACTIVE_PROFILE=analysis -e DATA_DIR=/data \
-#     -e OPENROUTER_API_KEY=sk-... \
-#     -v $(pwd)/.tmpdata:/data \
-#     hermes-senpi-trader
+# Runtime: stateless container, persistent state in /data (Railway Volume)
 # =============================================================================
 
-ARG HERMES_VERSION=latest
+FROM ubuntu:22.04
 
-# ---------------------------------------------------------------------------
-# Base: official Docker Hub image (nousresearch/hermes-agent)
-# NOTE: ghcr.io/nousresearch/hermes-agent is NOT publicly available.
-#       The official public image is on Docker Hub.
-# ---------------------------------------------------------------------------
-FROM nousresearch/hermes-agent:${HERMES_VERSION}
-
-ARG HERMES_VERSION
 ARG BUILD_DATE
 ARG GIT_SHA
+ARG HERMES_BRANCH=main
 
 LABEL org.opencontainers.image.title="hermes-senpi-trader"
 LABEL org.opencontainers.image.description="Hermes AI trading agent with Senpi MCP integration"
-LABEL org.opencontainers.image.version="${HERMES_VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${GIT_SHA}"
 LABEL org.opencontainers.image.source="https://github.com/algorytma/hermes-senpi-railway-template"
 
 # ---------------------------------------------------------------------------
-# System dependencies
+# System packages
 # ---------------------------------------------------------------------------
-USER root
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    jq \
     git \
+    jq \
+    ca-certificates \
     python3 \
     python3-pip \
+    python3-dev \
+    python3-venv \
+    build-essential \
+    libffi-dev \
+    ripgrep \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
-# Python dependencies (render-config.py)
-RUN pip3 install --no-cache-dir --break-system-packages pyyaml 2>/dev/null \
-    || pip3 install --no-cache-dir pyyaml
+# ---------------------------------------------------------------------------
+# Install uv (fast Python package manager, required by hermes install.sh)
+# ---------------------------------------------------------------------------
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:/root/.cargo/bin:${PATH}"
+
+# ---------------------------------------------------------------------------
+# Install Hermes-Agent from source (official method)
+# --skip-setup  : skip interactive wizard (will be configured via /data/config)
+# --no-venv     : use system Python to keep image size down
+# HERMES_INSTALL_DIR: pin install location
+# ---------------------------------------------------------------------------
+ENV HERMES_INSTALL_DIR=/opt/hermes-agent
+ENV HERMES_HOME=/root/.hermes
+
+RUN curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh \
+    | bash -s -- --skip-setup --branch "${HERMES_BRANCH}"
+
+# Ensure hermes binary is on PATH
+RUN ln -sf /root/.local/bin/hermes /usr/local/bin/hermes 2>/dev/null || \
+    ln -sf /opt/hermes-agent/venv/bin/hermes /usr/local/bin/hermes 2>/dev/null || \
+    find /root -name hermes -type f -executable 2>/dev/null | head -1 | \
+    xargs -I{} ln -sf {} /usr/local/bin/hermes
+
+# ---------------------------------------------------------------------------
+# Python deps for our bootstrap scripts
+# ---------------------------------------------------------------------------
+RUN pip3 install --no-cache-dir pyyaml
 
 # ---------------------------------------------------------------------------
 # Application files
@@ -69,24 +88,22 @@ COPY migrations/ /app/migrations/
 RUN find /app/migrations -name "*.sh" -exec chmod +x {} \;
 
 # ---------------------------------------------------------------------------
-# Build metadata baked into image
+# Build metadata
 # ---------------------------------------------------------------------------
-RUN echo "{\"hermes_version\":\"${HERMES_VERSION}\",\"build_date\":\"${BUILD_DATE}\",\"git_sha\":\"${GIT_SHA}\"}" \
+RUN echo "{\"build_date\":\"${BUILD_DATE}\",\"git_sha\":\"${GIT_SHA}\",\"hermes_branch\":\"${HERMES_BRANCH}\"}" \
     > /app/build-info.json
 
 # ---------------------------------------------------------------------------
 # Env defaults
-# NOTE: Volume is mounted by Railway at /data — do NOT declare VOLUME here.
-#       See: https://docs.railway.com/volumes/overview
+# NOTE: /data volume is mounted by Railway at platform level — no VOLUME here.
 # ---------------------------------------------------------------------------
 ENV DATA_DIR=/data
 ENV ACTIVE_PROFILE=analysis
-ENV HERMES_VERSION=${HERMES_VERSION}
 
 # ---------------------------------------------------------------------------
 # Healthcheck
 # ---------------------------------------------------------------------------
-HEALTHCHECK --interval=60s --timeout=10s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=60s --timeout=10s --start-period=120s --retries=3 \
     CMD test -f /data/.runtime/version.json || exit 1
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,9 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [build.args]
-HERMES_VERSION = "latest"         # Docker Hub: nousresearch/hermes-agent
+# Hermes-agent is installed from source (no pre-built Docker image exists).
+# HERMES_BRANCH pins which git branch to install from.
+HERMES_BRANCH = "main"
 
 [deploy]
 startCommand = "/app/bootstrap/prestart.sh"
